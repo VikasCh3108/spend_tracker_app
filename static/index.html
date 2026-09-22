@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spend Tracker</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 20px; color: #2c3e50; }
+        .card { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .card h2 { margin-bottom: 15px; font-size: 1.2rem; color: #2c3e50; }
+        input, select, button { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        button { background: #3498db; color: #fff; border: none; cursor: pointer; font-weight: 600; }
+        button:hover { background: #2980b9; }
+        button.danger { background: #e74c3c; }
+        button.danger:hover { background: #c0392b; }
+        button.success { background: #27ae60; }
+        button.success:hover { background: #229954; }
+        .row { display: flex; gap: 10px; }
+        .row > * { flex: 1; }
+        .auth-section { display: flex; gap: 10px; }
+        .auth-section > * { flex: 1; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #eee; font-size: 14px; }
+        th { color: #888; font-weight: 600; }
+        .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .summary-item { background: #f8f9fa; padding: 12px; border-radius: 6px; }
+        .summary-item .label { font-size: 12px; color: #888; margin-bottom: 4px; }
+        .summary-item .value { font-size: 1.5rem; font-weight: 700; color: #2c3e50; }
+        .category-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+        .category-bar .cat-name { width: 100px; font-size: 13px; }
+        .category-bar .bar-container { flex: 1; background: #eee; border-radius: 4px; height: 20px; overflow: hidden; }
+        .category-bar .bar { height: 100%; background: #3498db; border-radius: 4px; display: flex; align-items: center; padding-left: 6px; color: #fff; font-size: 11px; font-weight: 600; }
+        .insight { padding: 10px; border-radius: 6px; margin-bottom: 8px; font-size: 13px; }
+        .insight.flagged { background: #fff3cd; border-left: 3px solid #ffc107; }
+        .insight.not-flagged { background: #f8f9fa; border-left: 3px solid #dee2e6; }
+        .hidden { display: none; }
+        .error-msg { color: #e74c3c; font-size: 13px; margin-bottom: 10px; }
+        .success-msg { color: #27ae60; font-size: 13px; margin-bottom: 10px; }
+        .token-display { font-size: 11px; color: #888; word-break: break-all; margin-top: 8px; }
+        .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .nav .user-info { font-size: 14px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Spend Tracker</h1>
+
+        <!-- Auth Section -->
+        <div class="card" id="auth-card">
+            <h2>Login or Register</h2>
+            <div class="row">
+                <input type="text" id="username" placeholder="Username (min 3 chars)" />
+                <input type="password" id="password" placeholder="Password (min 6 chars)" />
+            </div>
+            <div class="row">
+                <button class="success" onclick="login()">Login</button>
+                <button onclick="register()">Register</button>
+            </div>
+            <div id="auth-error" class="error-msg"></div>
+        </div>
+
+        <!-- Main App (hidden until authenticated) -->
+        <div id="main-app" class="hidden">
+            <div class="nav">
+                <span class="user-info">Logged in as: <strong id="current-user"></strong></span>
+                <button class="danger" style="width: auto; padding: 6px 16px;" onclick="logout()">Logout</button>
+            </div>
+
+            <!-- Add Expense -->
+            <div class="card">
+                <h2>Add Expense</h2>
+                <div class="row">
+                    <input type="number" id="amount" placeholder="Amount ($)" step="0.01" min="0.01" />
+                    <input type="text" id="category" placeholder="Category (e.g. food)" maxlength="50" />
+                </div>
+                <div class="row">
+                    <input type="date" id="expense-date" />
+                    <input type="text" id="note" placeholder="Note (optional)" maxlength="500" />
+                </div>
+                <button onclick="addExpense()">Add Expense</button>
+                <div id="expense-msg"></div>
+            </div>
+
+            <!-- Summary -->
+            <div class="card">
+                <h2>Summary</h2>
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <div class="label">Total Spend</div>
+                        <div class="value" id="total-spend">$0.00</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="label">MoM Change</div>
+                        <div class="value" id="mom-change">—</div>
+                    </div>
+                </div>
+                <div style="margin-top: 15px;" id="category-breakdown"></div>
+                <button onclick="loadSummary()" style="width: auto; padding: 6px 16px; margin-top: 10px;">Refresh Summary</button>
+            </div>
+
+            <!-- Insights -->
+            <div class="card">
+                <h2>Category Insights</h2>
+                <div id="insights-container"><p style="color:#888; font-size:13px;">Click refresh to load insights.</p></div>
+                <button onclick="loadInsights()" style="width: auto; padding: 6px 16px; margin-top: 10px;">Refresh Insights</button>
+            </div>
+
+            <!-- Expense List -->
+            <div class="card">
+                <h2>Recent Expenses</h2>
+                <div class="row" style="margin-bottom: 10px;">
+                    <input type="text" id="filter-category" placeholder="Filter by category" />
+                    <input type="date" id="filter-start" />
+                    <input type="date" id="filter-end" />
+                </div>
+                <button onclick="loadExpenses()" style="width: auto; padding: 6px 16px; margin-bottom: 10px;">Apply Filter</button>
+                <table>
+                    <thead>
+                        <tr><th>Date</th><th>Category</th><th>Amount</th><th>Note</th></tr>
+                    </thead>
+                    <tbody id="expense-table"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API = '/api/v1';
+        let token = localStorage.getItem('token') || '';
+        let currentUser = localStorage.getItem('username') || '';
+
+        // Set today's date as default
+        document.getElementById('expense-date').value = new Date().toISOString().split('T')[0];
+
+        // Check if already logged in — verify token with backend
+        if (token) {
+            verifyToken();
+        }
+
+        async function verifyToken() {
+            try {
+                const data = await apiCall('/auth/me', 'GET');
+                currentUser = data.username;
+                localStorage.setItem('username', currentUser);
+                showMainApp();
+            } catch (e) {
+                // Token is invalid or expired — clear and show login
+                logout();
+            }
+        }
+
+        function setMsg(id, text, isError) {
+            const el = document.getElementById(id);
+            el.className = isError ? 'error-msg' : 'success-msg';
+            el.textContent = text;
+            setTimeout(() => { el.textContent = ''; }, 3000);
+        }
+
+        async function apiCall(path, method, body, isForm) {
+            const headers = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            if (!isForm && body) headers['Content-Type'] = 'application/json';
+
+            const opts = { method, headers };
+            if (body) {
+                opts.body = isForm ? body : JSON.stringify(body);
+            }
+
+            const res = await fetch(`${API}${path}`, opts);
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.detail || data.error || 'Request failed');
+            }
+            return data;
+        }
+
+        async function register() {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            if (!username || !password) {
+                setMsg('auth-error', 'Please enter username and password', true);
+                return;
+            }
+            try {
+                const data = await apiCall('/auth/register', 'POST', { username, password });
+                token = data.access_token;
+                currentUser = username;
+                localStorage.setItem('token', token);
+                localStorage.setItem('username', username);
+                showMainApp();
+            } catch (e) {
+                setMsg('auth-error', e.message, true);
+            }
+        }
+
+        async function login() {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            if (!username || !password) {
+                setMsg('auth-error', 'Please enter username and password', true);
+                return;
+            }
+            try {
+                const form = new FormData();
+                form.append('username', username);
+                form.append('password', password);
+                const data = await apiCall('/auth/login', 'POST', form, true);
+                token = data.access_token;
+                currentUser = username;
+                localStorage.setItem('token', token);
+                localStorage.setItem('username', username);
+                showMainApp();
+            } catch (e) {
+                setMsg('auth-error', e.message, true);
+            }
+        }
+
+        function logout() {
+            token = '';
+            currentUser = '';
+            localStorage.removeItem('token');
+            localStorage.removeItem('username');
+            document.getElementById('main-app').classList.add('hidden');
+            document.getElementById('auth-card').classList.remove('hidden');
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+        }
+
+        function showMainApp() {
+            document.getElementById('auth-card').classList.add('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+            document.getElementById('current-user').textContent = currentUser;
+            loadExpenses();
+            loadSummary();
+            loadInsights();
+        }
+
+        async function addExpense() {
+            const amount = parseFloat(document.getElementById('amount').value);
+            const category = document.getElementById('category').value.trim();
+            const date = document.getElementById('expense-date').value;
+            const note = document.getElementById('note').value.trim() || null;
+
+            if (!amount || amount <= 0) {
+                setMsg('expense-msg', 'Amount must be a positive number', true);
+                return;
+            }
+            if (!category) {
+                setMsg('expense-msg', 'Category is required', true);
+                return;
+            }
+            if (!date) {
+                setMsg('expense-msg', 'Date is required', true);
+                return;
+            }
+
+            try {
+                await apiCall('/expenses/', 'POST', { amount, category, date, note });
+                document.getElementById('amount').value = '';
+                document.getElementById('category').value = '';
+                document.getElementById('note').value = '';
+                setMsg('expense-msg', 'Expense added successfully!', false);
+                loadExpenses();
+                loadSummary();
+                loadInsights();
+            } catch (e) {
+                setMsg('expense-msg', e.message, true);
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function loadExpenses() {
+            const params = new URLSearchParams();
+            const cat = document.getElementById('filter-category').value.trim();
+            const start = document.getElementById('filter-start').value;
+            const end = document.getElementById('filter-end').value;
+            if (cat) params.append('category', cat);
+            if (start) params.append('start_date', start);
+            if (end) params.append('end_date', end);
+
+            try {
+                const data = await apiCall(`/expenses/?${params}`, 'GET');
+                const tbody = document.getElementById('expense-table');
+                tbody.innerHTML = '';
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#888;">No expenses found</td></tr>';
+                    return;
+                }
+                data.forEach(e => {
+                    const row = `<tr>
+                        <td>${e.date}</td>
+                        <td>${escapeHtml(e.category)}</td>
+                        <td>$${e.amount.toFixed(2)}</td>
+                        <td>${escapeHtml(e.note || '')}</td>
+                    </tr>`;
+                    tbody.innerHTML += row;
+                });
+            } catch (e) {
+                if (e.message.includes('credentials')) logout();
+            }
+        }
+
+        async function loadSummary() {
+            try {
+                const data = await apiCall('/summary/', 'GET');
+                document.getElementById('total-spend').textContent = `$${data.total_spend.toFixed(2)}`;
+
+                const mom = data.mom_change;
+                let momText = '—';
+                if (mom.change_percent !== null) {
+                    const sign = mom.change_percent >= 0 ? '+' : '';
+                    momText = `${sign}${mom.change_percent}%`;
+                } else if (mom.note) {
+                    momText = mom.note;
+                }
+                document.getElementById('mom-change').textContent = momText;
+
+                // Category breakdown bars
+                const container = document.getElementById('category-breakdown');
+                container.innerHTML = '';
+                const categories = data.spend_by_category;
+                const maxAmount = Math.max(...Object.values(categories), 1);
+                for (const [cat, amount] of Object.entries(categories)) {
+                    const widthPct = (amount / maxAmount) * 100;
+                    container.innerHTML += `
+                        <div class="category-bar">
+                            <span class="cat-name">${escapeHtml(cat)}</span>
+                            <div class="bar-container">
+                                <div class="bar" style="width:${widthPct}%;">$${amount.toFixed(2)}</div>
+                            </div>
+                        </div>`;
+                }
+            } catch (e) {
+                if (e.message.includes('credentials')) logout();
+            }
+        }
+
+        async function loadInsights() {
+            try {
+                const data = await apiCall('/insights/', 'GET');
+                const container = document.getElementById('insights-container');
+                if (data.length === 0) {
+                    container.innerHTML = '<p style="color:#888; font-size:13px;">No insights available. Need spend data from at least 2 months.</p>';
+                    return;
+                }
+                container.innerHTML = '';
+                data.forEach(i => {
+                    const cls = i.flagged ? 'flagged' : 'not-flagged';
+                    const flagText = i.flagged
+                        ? `⚠️ Flagged: ${i.increase_percent}% increase`
+                        : `${i.increase_percent}% change`;
+                    container.innerHTML += `
+                        <div class="insight ${cls}">
+                            <strong>${escapeHtml(i.category)}</strong>: $${i.previous_month_spend.toFixed(2)} → $${i.current_month_spend.toFixed(2)} (${flagText})
+                        </div>`;
+                });
+            } catch (e) {
+                if (e.message.includes('credentials')) logout();
+            }
+        }
+    </script>
+</body>
+</html>
